@@ -5,27 +5,29 @@ var fs = require('fs');
 var ffmpeg = require('fluent-ffmpeg');
 var prompt = require('prompt');
 
+var secrets = require('./secrets');
+
 /* Initialise APIs */
 // Spotify
 var spotifyApi = new SpotifyWebApi();
 // Youtube
 var youTube = new YouTube();
-youTube.setKey('AIzaSyCQ1FTnfcEiD6s5GTUfaT8SsXaUlA6vCsQ');
+youTube.setKey(secrets.YOUTUBE_API_KEY);
 
-const LIMIT_ART = 10;
-const LIMIT_TRACKS = 4;
+const LIMIT_RESULTS_QUERY = 10
+const LIMIT_ART = 2;
+const LIMIT_TRACKS = 2;
 
 // Unique Id for the created playlist
-var playlistId = Date.now();
+const playlistId = Date.now();
 
-// For a specific query, search best result on Spotify and get a Json containing all the informations about the track
+// For a specific query, search best results on Spotify
 var query2Tracks = (q, callback) => {
 	spotifyApi
 		.searchTracks(q)
 		.then(function(data) {
-			callback(null, data.body.tracks.items.slice(0, 10));
+			callback(null, data.body.tracks.items.slice(0, LIMIT_RESULTS_QUERY));
 		}, function(err) {
-			console.log('Something went wrong!', err);
 			callback(err, null);
 		});
 };
@@ -33,115 +35,127 @@ var query2Tracks = (q, callback) => {
 // For a specific track, get a list of artists related to the main artist of the track
 var getRelatedArtists = (track, callback) => {
 	var artist = track.artists[0];
-	var limit_art = LIMIT_ART; // Limit returned related artists to `limit_art`
 	spotifyApi
 		.getArtistRelatedArtists(artist.id)
   		.then(function(data) {
-  			console.log("Found " + limit_art + " artists related to " + artist.name);
-    		callback(null, data.body.artists.slice(0, limit_art));
+    		callback(null, data.body.artists.slice(0, LIMIT_ART));
   		}, function(err) {
-    		console.log('Something went wrong!', err);
     		callback(err, null);
   		});
 };
 
-// For a specific artist, get its 5 more popular tracks
+// For a specific artist, get its more popular tracks
 var artist2TopTracks = (artist, callback) => {
-	var limit_tracks = LIMIT_TRACKS; // Limit returned tracks to `limit_tracks`
 	spotifyApi.getArtistTopTracks(artist.id, 'GB')
 	  	.then(function(data) {
-	  		//console.log("Found " + limit_tracks + " bests tracks for artist " + artist.name);
-	    	callback(null, data.body.tracks.slice(0, limit_tracks));
+	    	callback(null, data.body.tracks.slice(0, LIMIT_TRACKS));
     	}, function(err) {
-	    	console.log('Something went wrong!', err);
 	    	callback(err, null);
 	  	});
 };
 
 // For a specific track, download its more matching video on youtube
-var track2Video = (track, callback) => {
+var track2Url = (track, callback) => {
+	// Create Youtube Query :
+	// Ex : "Artist - TrackName"
 	var query_youtube = track.artists[0].name + ' - ' + track.name;
-	//console.log("Searching best Youtube video for query : " + query_youtube)
-	console.log(query_youtube);
+
 	youTube.search(query_youtube, 1, function(error, result) {
 		if (error) {
 			callback(error, null);
-		    console.log(error);
 	  	}
 	  	else {
-	  		var vidName = result['items'][0]["snippet"]["title"]
+	  		var vidName = formatVidName(result['items'][0]["snippet"]["title"])
 		    var vidId = result['items'][0]['id']['videoId'];
 		    var url = "http://www.youtube.com/watch?v=" + vidId;
 
-		    console.log('Downloading video from Youtube...');
-
-		    var options = {
-				"quality": "highest",
-				"filter": function(format) { return format.container === 'mp4'; }
-			}
-
-			var path = 'videos/' + playlistId + "/" + vidName + '.mp4';
-
-			ytdl(url, options)
-			  	.pipe(fs.createWriteStream(path))
-			  	.on('finish', function() {
-			  		callback(null, {vidName: vidName, path: path});
-			  	})
-			  	.on('error', console.error);
+		    callback(null, {url: url, vidName: vidName});
 	  	}
 	});
 };
 
+// For a specific Youtube url, download Youtube video
+var url2Video = (resp, callback) => {
+	var options = {
+		"quality": "highest",
+		"filter": function(format) { return format.container === 'mp4'; }
+	}
+
+	var path = 'videos/' + playlistId + "/" + resp.vidName + '.mp4';
+
+	ytdl(resp.url, options)
+	  	.pipe(fs.createWriteStream(path))
+	  	.on('finish', function() {
+	  		callback(null, {vidName: resp.vidName, path: path});
+	  	})
+	  	.on('error', console.error);
+}
+
 // For a specific video, convert to mp3
 var video2Mp3 = (resp, callback) => {
-	console.log('Converting video to mp3...')
-
 	var output = "musics/" + playlistId + "/" + resp.vidName + ".mp3";
 
-	try {
-		var command = ffmpeg({ source: resp.path })
-			.toFormat('mp3')
-			.saveToFile(output)
-			.on('error', e => callback(e, null))
-			.on('end', function() {
-		  		callback(null, true);
-			});
-	} catch(e) {
-	  	callback(e, null);
-	}
+	var command = ffmpeg({ source: resp.path })
+		.toFormat('mp3')
+		.saveToFile(output)
+		.on('error', e => callback(e, null))
+		.on('end', function() {
+	  		callback(null, true);
+		});
 };
 
 // Remove undesirable characters ('/', ...)
 var formatVidName = (vidName) => {
-	for (i=0; i<vidName.length; i++) {
+	var vidNameLength = vidName.length;
 
-	};
+	for (i = 0; i < vidNameLength; i++) {
+		if (vidName[i] === "/") {
+			vidName = vidName.replaceAt(i, "_");
+		}
+	}
+
+	return vidName;
 };
 
-prompt.start();
-prompt.get('q', (err, result) => {
-	query2Tracks(result.q, (err, tracks) => {
+String.prototype.replaceAt=function(index, character) {
+    return this.substr(0, index) + character + this.substr(index+character.length);
+}
+
+
+//
+//	ACTUAL PROGRAM	
+//
+
+fs.mkdir('videos/' + playlistId, (err, result) => {
+	if (err) throw err;
+	fs.mkdir('musics/' + playlistId, (err, result) => {
 		if (err) throw err;
-		console.log("Found " + tracks.length + " tracks, select one : ")
-		for (i=0; i<tracks.length; i++) {
-			// Display matching tracks
-			console.log(i + ") " + tracks[i].artists[0].name + " - " + tracks[i].name);
-		}
-		prompt.get('choice', (err, result) => {
-			var track = tracks[parseInt(result.choice)];
-			getRelatedArtists(track, (err, artists) => {
+		prompt.start();
+		prompt.get('q', (err, result) => {
+			if (err) throw err;
+			query2Tracks(result.q, (err, tracks) => {
 				if (err) throw err;
-				artists.forEach(artist => {
-					artist2TopTracks(artist, (err, tracks) => {
+				console.log("Found " + tracks.length + " tracks, select one : ");
+				var tracksLength = tracks.length
+				for (i = 0; i < tracksLength; i++) {
+					console.log(i + ") " + tracks[i].artists[0].name + " - " + tracks[i].name);
+				}
+				prompt.get('choice', (err, result) => {
+					var track = tracks[parseInt(result.choice)];
+					getRelatedArtists(track, (err, artists) => {
 						if (err) throw err;
-						tracks.forEach(track => {
-							fs.mkdir('videos/' + playlistId, (err, result) => {
-								track2Video(track, (err, v) => {
-									if (err) console.err(err);
-									fs.mkdir('musics/' + playlistId, (err, result) => {
-										video2Mp3(v, (err, resp) => {
-											if (err) console.error(err);
-											console.log("Successfully downloaded");
+						artists.forEach(artist => {
+							artist2TopTracks(artist, (err, tracks) => {
+								if (err) throw err;
+								tracks.forEach(track => {
+									track2Url(track, (err, resp) => {
+										if (err) console.err(err);
+										url2Video(resp, (err, resp) => {
+											if (err) console.err(err);
+											video2Mp3(resp, (err, resp) => {
+												if (err) console.error(err);
+												console.log("Successfully downloaded");
+											});
 										});
 									});
 								});
