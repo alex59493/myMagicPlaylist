@@ -127,17 +127,6 @@ String.prototype.replaceAt=function(index, character) {
 //	ACTUAL PROGRAM	
 //
 
-var downloadTrack = (track) => {
-	async.waterfall([
-		async.apply(track2Url, track),
-	    url2Video,
-	    video2Mp3,
-	], function (err, result) {
-	    if (err) console.error(err);
-	    else console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
-	});
-};
-
 // Get the desired track from the user by using a prompt
 var researchConsole = (callback) => {
 	prompt.start();
@@ -161,33 +150,66 @@ var researchConsole = (callback) => {
 	});
 };
 
-async.parallel([
-    function(callback){
-    	fs.mkdir('videos/' + playlistId, function() {
-    		callback(null, 'Done');
-    	});
-    },
-    function(callback){
-    	fs.mkdir('musics/' + playlistId, function() {
-    		callback(null, 'Done');
-    	});
-    },
-],
-function(err, results){
-    if (err) throw err;
-    
-    researchConsole((err, track) => {
-    	if (err) throw err;
-    	getRelatedArtists(track, (err, artists) => {
-			if (err) throw err;
-			artists.forEach(artist => {
-				artist2TopTracks(artist, (err, tracks) => {
-					if (err) throw err;
-					tracks.forEach(track => {
-						downloadTrack(track);
-					});
-				});
+var generatePlaylist = (track, callback) => {
+	var playlist = [];
+
+	getRelatedArtists(track, (err, artists) => {
+		if (err) throw err;
+		artists.forEach(artist => {
+			artist2TopTracks(artist, (err, tracks) => {
+				if (err) throw err;
+
+				var t;
+				for (t = 0; t < tracks.length; t++) {
+					playlist.push(tracks[t]);
+				};
+
+				callback(null, playlist) // Should not be here
 			});
 		});
-    });	
+	});
+};
+
+var downloadPlaylist = (playlist, callback) => {
+	async.parallel([
+	    function(callback){
+	    	fs.mkdir('videos/' + playlistId, function() {
+	    		callback(null, 'Done');
+	    	});
+	    },
+	    function(callback){
+	    	fs.mkdir('musics/' + playlistId, function() {
+	    		callback(null, 'Done');
+	    	});
+	    },
+	],
+	function(err, results){
+	    if (err) throw err;
+
+	    playlist.forEach(track => {
+			async.waterfall([
+				async.apply(track2Url, track),
+			    url2Video,
+			    video2Mp3,
+			], function (err, result) {
+			    if (err) console.error(err);
+			    else console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
+			});
+		});
+	});
+};
+
+researchConsole((err, track) => {
+	if (err) throw err;
+
+	console.log("Generate playlist")
+	generatePlaylist(track, (err, playlist) => {
+		if (err) throw err;
+
+		console.log("Download playlist")
+		downloadPlaylist(playlist, (err, result) => {
+			if (err) throw err;
+			console.log("Done");
+		});
+	});
 });
