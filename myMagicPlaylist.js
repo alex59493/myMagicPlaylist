@@ -4,6 +4,7 @@ var ytdl = require('ytdl-core');
 var fs = require('fs');
 var ffmpeg = require('fluent-ffmpeg');
 var prompt = require('prompt');
+var async = require('async')
 
 var secrets = require('./secrets');
 
@@ -16,7 +17,7 @@ youTube.setKey(secrets.YOUTUBE_API_KEY);
 
 const LIMIT_RESULTS_QUERY = 10
 const LIMIT_ART = 2;
-const LIMIT_TRACKS = 2;
+const LIMIT_TRACKS = 1;
 
 // Unique Id for the created playlist
 const playlistId = Date.now();
@@ -126,44 +127,67 @@ String.prototype.replaceAt=function(index, character) {
 //	ACTUAL PROGRAM	
 //
 
-fs.mkdir('videos/' + playlistId, (err, result) => {
-	if (err) throw err;
-	fs.mkdir('musics/' + playlistId, (err, result) => {
+var downloadTrack = (track) => {
+	async.waterfall([
+		async.apply(track2Url, track),
+	    url2Video,
+	    video2Mp3,
+	], function (err, result) {
+	    if (err) console.error(err);
+	    else console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
+	});
+};
+
+// Get the desired track from the user by using a prompt
+var researchConsole = (callback) => {
+	prompt.start();
+	prompt.get('q', (err, result) => {
 		if (err) throw err;
-		prompt.start();
-		prompt.get('q', (err, result) => {
+		query2Tracks(result.q, (err, tracks) => {
 			if (err) throw err;
-			query2Tracks(result.q, (err, tracks) => {
+			console.log("Found " + tracks.length + " tracks, select one : ");
+
+			// Display result of search
+			var tracksLength = tracks.length
+			for (i = 0; i < tracksLength; i++) {
+				console.log(i + ") " + tracks[i].artists[0].name + " - " + tracks[i].name);
+			}
+			prompt.get('choice', (err, result) => {
 				if (err) throw err;
-				console.log("Found " + tracks.length + " tracks, select one : ");
-				var tracksLength = tracks.length
-				for (i = 0; i < tracksLength; i++) {
-					console.log(i + ") " + tracks[i].artists[0].name + " - " + tracks[i].name);
-				}
-				prompt.get('choice', (err, result) => {
-					var track = tracks[parseInt(result.choice)];
-					getRelatedArtists(track, (err, artists) => {
-						if (err) throw err;
-						artists.forEach(artist => {
-							artist2TopTracks(artist, (err, tracks) => {
-								if (err) throw err;
-								tracks.forEach(track => {
-									track2Url(track, (err, resp) => {
-										if (err) console.err(err);
-										url2Video(resp, (err, resp) => {
-											if (err) console.err(err);
-											video2Mp3(resp, (err, resp) => {
-												if (err) console.error(err);
-												console.log("Successfully downloaded");
-											});
-										});
-									});
-								});
-							});
-						});
+				var track = tracks[parseInt(result.choice)];
+				callback(null, track);
+			});
+		});
+	});
+};
+
+async.parallel([
+    function(callback){
+    	fs.mkdir('videos/' + playlistId, function() {
+    		callback(null, 'Done');
+    	});
+    },
+    function(callback){
+    	fs.mkdir('musics/' + playlistId, function() {
+    		callback(null, 'Done');
+    	});
+    },
+],
+function(err, results){
+    if (err) throw err;
+    
+    researchConsole((err, track) => {
+    	if (err) throw err;
+    	getRelatedArtists(track, (err, artists) => {
+			if (err) throw err;
+			artists.forEach(artist => {
+				artist2TopTracks(artist, (err, tracks) => {
+					if (err) throw err;
+					tracks.forEach(track => {
+						downloadTrack(track);
 					});
 				});
 			});
 		});
-	});
+    });	
 });
