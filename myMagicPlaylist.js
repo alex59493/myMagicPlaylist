@@ -16,7 +16,7 @@ var youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
 const LIMIT_RESULTS_QUERY = 10
-const LIMIT_ART = 3;
+const LIMIT_ART = 2;
 const LIMIT_TRACKS = 2;
 
 // Unique Id for the created playlist
@@ -222,6 +222,7 @@ var downloadPlaylist = (playlist, callback) => {
 			], function (err, result) {
 			    if (err) console.error(err);
 			    else console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
+			    callback();
 			});
 		},
 		function(err){
