@@ -16,8 +16,8 @@ var youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
 const LIMIT_RESULTS_QUERY = 10
-const LIMIT_ART = 2;
-const LIMIT_TRACKS = 1;
+const LIMIT_ART = 3;
+const LIMIT_TRACKS = 2;
 
 // Unique Id for the created playlist
 const playlistId = Date.now();
@@ -108,13 +108,11 @@ var video2Mp3 = (resp, callback) => {
 // Remove undesirable characters ('/', ...)
 var formatVidName = (vidName) => {
 	var vidNameLength = vidName.length;
-
 	for (i = 0; i < vidNameLength; i++) {
 		if (vidName[i] === "/") {
 			vidName = vidName.replaceAt(i, "_");
 		}
 	}
-
 	return vidName;
 };
 
@@ -127,7 +125,7 @@ String.prototype.replaceAt=function(index, character) {
 //	ACTUAL PROGRAM	
 //
 
-// Get the desired track from the user by using a prompt
+// Get the desired track from the user by using a console prompt
 var researchConsole = (callback) => {
 	prompt.start();
 	prompt.get('q', (err, result) => {
@@ -150,43 +148,73 @@ var researchConsole = (callback) => {
 	});
 };
 
+/*
+// Test code
+researchConsole((err, track) => {
+	if (err) throw err;
+	else console.log(track)
+});
+*/
+
 var generatePlaylist = (track, callback) => {
 	var playlist = [];
 
-	getRelatedArtists(track, (err, artists) => {
-		if (err) throw err;
-		artists.forEach(artist => {
-			artist2TopTracks(artist, (err, tracks) => {
-				if (err) throw err;
+	async.waterfall([
+		async.apply(getRelatedArtists, track),
+		(artists, callback1) => {
+			async.each(artists, (artist, callback2) => {
+				artist2TopTracks(artist, (err, tracks) => {
 
-				var t;
-				for (t = 0; t < tracks.length; t++) {
-					playlist.push(tracks[t]);
-				};
+					var t;
+					for (t = 0; t < tracks.length; t++) {
+						playlist.push(tracks[t]);
+					};
 
-				callback(null, playlist) // Should not be here
-			});
-		});
+					callback2();
+				});
+			},
+			function(err){
+			    if (err) throw err;
+			    callback1();
+			})
+	    },
+	], function (err, result) {
+	    if (err) throw err;
+	    else callback(null, playlist);
 	});
 };
 
+// Test code
+/*
+researchConsole((err, track) => {
+	if (err) throw err;
+
+	console.log("Generate playlist...")
+	generatePlaylist(track, (err, playlist) => {
+		if (err) throw err;
+		console.log(playlist);
+
+	});
+});
+*/
+
 var downloadPlaylist = (playlist, callback) => {
 	async.parallel([
-	    function(callback){
+	    function(callback1){
 	    	fs.mkdir('videos/' + playlistId, function() {
-	    		callback(null, 'Done');
+	    		callback1(null, 'Done');
 	    	});
 	    },
-	    function(callback){
+	    function(callback2){
 	    	fs.mkdir('musics/' + playlistId, function() {
-	    		callback(null, 'Done');
+	    		callback2(null, 'Done');
 	    	});
 	    },
 	],
 	function(err, results){
 	    if (err) throw err;
 
-	    playlist.forEach(track => {
+	    async.each(playlist, (track, callback) => {
 			async.waterfall([
 				async.apply(track2Url, track),
 			    url2Video,
@@ -195,18 +223,23 @@ var downloadPlaylist = (playlist, callback) => {
 			    if (err) console.error(err);
 			    else console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
 			});
-		});
+		},
+		function(err){
+		    if (err) throw err;
+		    callback();
+		})
+
 	});
 };
 
+// Test code
 researchConsole((err, track) => {
 	if (err) throw err;
 
-	console.log("Generate playlist")
+	console.log("Generate playlist...")
 	generatePlaylist(track, (err, playlist) => {
 		if (err) throw err;
-
-		console.log("Download playlist")
+		console.log("Download playlist...")
 		downloadPlaylist(playlist, (err, result) => {
 			if (err) throw err;
 			console.log("Done");
