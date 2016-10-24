@@ -1,10 +1,10 @@
 var SpotifyWebApi = require('spotify-web-api-node');
 var YouTube = require('youtube-node');
 var ytdl = require('ytdl-core');
-var fs = require('fs');
 var ffmpeg = require('fluent-ffmpeg');
-var prompt = require('prompt');
 var async = require('async')
+var prompt = require('prompt');
+var fs = require('fs');
 
 var secrets = require('./secrets');
 
@@ -16,8 +16,8 @@ var youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
 const LIMIT_RESULTS_QUERY = 10
-const LIMIT_ART = 2;
-const LIMIT_TRACKS = 2;
+const LIMIT_ART = 8;
+const LIMIT_TRACKS = 4;
 
 // Unique Id for the created playlist
 const playlistId = Date.now();
