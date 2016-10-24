@@ -6,7 +6,13 @@ var async = require('async')
 var prompt = require('prompt');
 var fs = require('fs');
 
-var secrets = require('./secrets');
+
+try {
+ 	var secrets = require('./secrets');
+}
+catch (e) {
+	throw "Impossible to import ./secrets.json."
+}
 
 /* Initialise APIs */
 // Spotify
