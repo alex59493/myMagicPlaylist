@@ -1,27 +1,24 @@
-var SpotifyWebApi = require('spotify-web-api-node');
-var YouTube = require('youtube-node');
-var ytdl = require('ytdl-core');
-var ffmpeg = require('fluent-ffmpeg');
-var async = require('async')
-var prompt = require('prompt');
-var fs = require('fs');
+"use strict";
 
+const SpotifyWebApi = require('spotify-web-api-node');
+const YouTube = require('youtube-node');
+const ytdl = require('ytdl-core');
+const ffmpeg = require('fluent-ffmpeg');
+const async = require('async');
+const prompt = require('prompt');
+const fs = require('fs');
 
-try {
- 	var secrets = require('./secrets');
-}
-catch (e) {
-	throw "Impossible to import ./secrets.json."
-}
+const secrets = require('./secrets');
+
 
 /* Initialise APIs */
 // Spotify
-var spotifyApi = new SpotifyWebApi();
+const spotifyApi = new SpotifyWebApi();
 // Youtube
-var youTube = new YouTube();
+const youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
-const LIMIT_RESULTS_QUERY = 10
+const LIMIT_RESULTS_QUERY = 10;
 const LIMIT_ART = 8;
 const LIMIT_TRACKS = 4;
 
@@ -72,8 +69,8 @@ var track2Url = (track, callback) => {
 			callback(error, null);
 	  	}
 	  	else {
-	  		var vidName = formatVidName(result['items'][0]["snippet"]["title"])
-		    var vidId = result['items'][0]['id']['videoId'];
+	  		var vidName = formatVidName(result.items[0].snippet.title);
+		    var vidId = result.items[0].id.videoId;
 		    var url = "http://www.youtube.com/watch?v=" + vidId;
 
 		    callback(null, {url: url, vidName: vidName});
@@ -86,7 +83,7 @@ var url2Video = (resp, callback) => {
 	var options = {
 		"quality": "highest",
 		"filter": function(format) { return format.container === 'mp4'; }
-	}
+	};
 
 	var path = 'videos/' + playlistId + "/" + resp.vidName + '.mp4';
 
@@ -96,13 +93,13 @@ var url2Video = (resp, callback) => {
 	  		callback(null, {vidName: resp.vidName, path: path});
 	  	})
 	  	.on('error', console.error);
-}
+};
 
 // For a specific video, convert to mp3
 var video2Mp3 = (resp, callback) => {
 	var output = "musics/" + playlistId + "/" + resp.vidName + ".mp3";
 
-	var command = ffmpeg({ source: resp.path })
+	ffmpeg({ source: resp.path })
 		.toFormat('mp3')
 		.saveToFile(output)
 		.on('error', e => callback(e, null))
@@ -114,7 +111,7 @@ var video2Mp3 = (resp, callback) => {
 // Remove undesirable characters ('/', ...)
 var formatVidName = (vidName) => {
 	var vidNameLength = vidName.length;
-	for (i = 0; i < vidNameLength; i++) {
+	for (let i = 0; i < vidNameLength; i++) {
 		if (vidName[i] === "/") {
 			vidName = vidName.replaceAt(i, "_");
 		}
@@ -124,7 +121,7 @@ var formatVidName = (vidName) => {
 
 String.prototype.replaceAt=function(index, character) {
     return this.substr(0, index) + character + this.substr(index+character.length);
-}
+};
 
 
 //
@@ -141,8 +138,7 @@ var researchConsole = (callback) => {
 			console.log("Found " + tracks.length + " tracks, select one : ");
 
 			// Display result of search
-			var tracksLength = tracks.length
-			for (i = 0; i < tracksLength; i++) {
+			for (let i = 0; i < tracks.length; i++) {
 				console.log(i + ") " + tracks[i].artists[0].name + " - " + tracks[i].name);
 			}
 			prompt.get('choice', (err, result) => {
@@ -174,7 +170,7 @@ var generatePlaylist = (track, callback) => {
 					var t;
 					for (t = 0; t < tracks.length; t++) {
 						playlist.push(tracks[t]);
-					};
+					}
 
 					callback2();
 				});
@@ -182,7 +178,7 @@ var generatePlaylist = (track, callback) => {
 			function(err){
 			    if (err) throw err;
 			    callback1();
-			})
+			});
 	    },
 	], function (err, result) {
 	    if (err) throw err;
@@ -234,7 +230,7 @@ var downloadPlaylist = (playlist, callback) => {
 		function(err){
 		    if (err) throw err;
 		    callback();
-		})
+		});
 
 	});
 };
@@ -243,10 +239,10 @@ var downloadPlaylist = (playlist, callback) => {
 researchConsole((err, track) => {
 	if (err) throw err;
 
-	console.log("Generate playlist...")
+	console.log("Generate playlist...");
 	generatePlaylist(track, (err, playlist) => {
 		if (err) throw err;
-		console.log("Download playlist...")
+		console.log("Download playlist...");
 		downloadPlaylist(playlist, (err, result) => {
 			if (err) throw err;
 			console.log("Done");
