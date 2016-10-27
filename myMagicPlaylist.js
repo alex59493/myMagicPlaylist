@@ -28,8 +28,8 @@ const youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
 const LIMIT_RESULTS_QUERY = 10;
-const LIMIT_ART = 8;
-const LIMIT_TRACKS = 4;
+const LIMIT_ART = 3;
+const LIMIT_TRACKS = 2;
 const PLAYLIST_ID = Date.now(); // Unique Id for the created playlist
 
 
@@ -195,7 +195,7 @@ var generatePlaylist = (track) => {
 					return artist2TopTracks(artist)
 				  		.then(function(tracks) {
 						    for (let i = 0; i < tracks.length; i++) {
-								playlist.push(tracks[i].id);
+								playlist.push(tracks[i]);
 							}
 					  	}).catch(function(err) {
 						    reject(err);
@@ -222,54 +222,57 @@ researchConsole()
 */
 
 
-var downloadPlaylist = (playlist, callback) => {
-	async.parallel([
-	    function(callback1){
-	    	fs.mkdir('videos/' + PLAYLIST_ID, function() {
-	    		callback1(null, 'Done');
-	    	});
-	    },
-	    function(callback2){
-	    	fs.mkdir('musics/' + PLAYLIST_ID, function() {
-	    		callback2(null, 'Done');
-	    	});
-	    },
-	],
-	function(err, results){
-	    if (err) throw err;
+var createVideoFolder = new Promise(function(resolve, reject) {
+	fs.mkdir('videos/' + PLAYLIST_ID, function(e) {
+		if (e) reject(e);
+		resolve('Video folder created');
+	});
+});
 
-	    async.each(playlist, (track, callback) => {
-			async.waterfall([
-				async.apply(track2Url, track),
-			    url2Video,
-			    video2Mp3,
-			], function (err, result) {
-			    if (err) console.error(err);
-			    else console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
-			    callback();
+var createMusicFolder = new Promise(function(resolve, reject) {
+	fs.mkdir('musics/' + PLAYLIST_ID, function(e) {
+		if (e) reject(e);
+		resolve('Music folder created');
+	});
+});
+
+var downloadPlaylist = (playlist) => {
+	return new Promise(function(resolve, reject) {
+		Promise.all([createVideoFolder, createMusicFolder])
+			.then(function() {
+				return Promise.all(playlist.map(function (track) {
+					return track2Url(track)
+				  		.then(function(url) {
+						    return url2Video(url);
+					  	}).then(function(video) {
+						    return video2Mp3(video);
+					  	}).then(function() {
+					  		return new Promise(function(resolve, reject) {
+					  			console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
+					  			resolve(track);
+					  		});
+					  	}).catch(function(err) {
+						    return reject(err);
+						});
+				}));
+			}).then(function(playlist) {
+				resolve(playlist);
+			}).catch(function(err) {
+			    reject(err);
 			});
-		},
-		function(err){
-		    if (err) throw err;
-		    callback();
-		});
-
 	});
 };
 
 // Test code
-/*
-researchConsole((err, track) => {
-	if (err) throw err;
-
-	console.log("Generate playlist...");
-	generatePlaylist(track, (err, playlist) => {
-		if (err) throw err;
+researchConsole()
+	.then(function(track) {
+		console.log("Generate playlist...");
+		return generatePlaylist(track);
+	}).then(function(playlist) {
 		console.log("Download playlist...");
-		downloadPlaylist(playlist, (err, result) => {
-			if (err) throw err;
-			console.log("Done");
-		});
+		return downloadPlaylist(playlist);
+	}).then(function() {
+		console.log("Done");
+	}).catch(function(err) {
+	    console.log(err);
 	});
-});
-*/
