@@ -28,63 +28,65 @@ const youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
 const LIMIT_RESULTS_QUERY = 10;
-const LIMIT_ART = 3;
+const LIMIT_ART = 2;
 const LIMIT_TRACKS = 2;
 const PLAYLIST_ID = Date.now(); // Unique Id for the created playlist
 
 
 // For a specific query string, return a list of best tracks
-var query2Tracks = (q) => {
-    return new Promise (function(resolve, reject) {
+const query2Tracks = function(q) {
+    return new Promise ((resolve, reject) => {
     	spotifyApi
 			.searchTracks(q)
-			.then(function(data) {
-				resolve(data.body.tracks.items.slice(0, LIMIT_RESULTS_QUERY));
-			}, function(err) {
+			.then(data => {
+				let tracks = data.body.tracks.items.slice(0, LIMIT_RESULTS_QUERY);
+				resolve(tracks);
+			}, err => {
 				reject(err);
 			});
     });
 };
 
 // For a specific track, return a list of artists related to the main artist of the track
-var getRelatedArtists = (track) => {
-	return new Promise (function(resolve, reject) {
-		var artist = track.artists[0];
+const getRelatedArtists = function(track) {
+	return new Promise ((resolve, reject) => {
+		let artist = track.artists[0];
 		spotifyApi
 			.getArtistRelatedArtists(artist.id)
-	  		.then(function(data) {
-	    		resolve(data.body.artists.slice(0, LIMIT_ART));
-	  		}, function(err) {
+	  		.then(data => {
+	  			let artists = data.body.artists.slice(0, LIMIT_ART);
+	    		resolve(artists);
+	  		}, err => {
 	    		reject(err);
 	  		});
   	});
 };
 
 // For a specific artist, get its more popular tracks
-var artist2TopTracks = (artist) => {
-	return new Promise (function(resolve, reject) {
+const artist2TopTracks = function(artist) {
+	return new Promise ((resolve, reject) => {
 		spotifyApi.getArtistTopTracks(artist.id, 'GB')
-		  	.then(function(data) {
-		    	resolve(data.body.tracks.slice(0, LIMIT_TRACKS));
-	    	}, function(err) {
+		  	.then((data) => {
+		  		let tracks = data.body.tracks.slice(0, LIMIT_TRACKS);
+		    	resolve(tracks);
+	    	}, (err) => {
 		    	reject(err);
 		  	});
   	});
 };
 
+
 // For a specific track, return its Youtube Url
-var track2Url = (track) => {
-	return new Promise (function(resolve, reject) {
+const track2Url = function(track) {
+	return new Promise ((resolve, reject) => {
 		let query_youtube = track.artists[0].name + ' - ' + track.name; // Ex : "Artist - TrackName"
 
-		youTube.search(query_youtube, 1, function(error, result) {
-			if (error) {
-				reject(error);
-		  	}
+		youTube.search(query_youtube, 1, (error, result) => {
+			if (error) reject(error);
 		  	else {
-		  		var vidName = formatVidName(result.items[0].snippet.title);
-			    var vidId = result.items[0].id.videoId;
-			    var url = "http://www.youtube.com/watch?v=" + vidId;
+		  		let vidName = formatVidName(result.items[0].snippet.title);
+			    let vidId = result.items[0].id.videoId;
+			    let url = "http://www.youtube.com/watch?v=" + vidId;
 
 			    resolve({url: url, vidName: vidName});
 		  	}
@@ -93,45 +95,37 @@ var track2Url = (track) => {
 };
 
 // For a specific Youtube url, download Youtube video
-var url2Video = (resp) => {
-	return new Promise (function(resolve, reject) {
-		var options = {
+const url2Video = function(resp) {
+	return new Promise ((resolve, reject) => {
+		let options = {
 			"quality": "highest",
-			"filter": function(format) { return format.container === 'mp4'; }
+			"filter": (format) => { return format.container === 'mp4'; }
 		};
 
-		var path = 'videos/' + PLAYLIST_ID + "/" + resp.vidName + '.mp4';
+		let path = 'videos/' + PLAYLIST_ID + "/" + resp.vidName + '.mp4';
 
 		ytdl(resp.url, options)
 		  	.pipe(fs.createWriteStream(path))
-		  	.on('finish', function() {
-		  		resolve({vidName: resp.vidName, path: path});
-		  	})
-		  	.on('error', function() {
-		  		reject("Error with ytdl");
-		  	});
+		  	.on('finish', () => { resolve({vidName: resp.vidName, path: path}); })
+		  	.on('error', () => { reject("Error with ytdl"); });
   	});
 };
 
 // For a specific video, convert to mp3
-var video2Mp3 = (resp) => {
-	return new Promise (function(resolve, reject) {
-		var output = "musics/" + PLAYLIST_ID + "/" + resp.vidName + ".mp3";
+const video2Mp3 = function(resp) {
+	return new Promise ((resolve, reject) => {
+		let output = "musics/" + PLAYLIST_ID + "/" + resp.vidName + ".mp3";
 
 		ffmpeg({ source: resp.path })
 			.toFormat('mp3')
 			.saveToFile(output)
-			.on('error', function(e) {
-				reject(e);
-			})
-			.on('end', function() {
-		  		resolve(true);
-			});
+			.on('error', (e) => { reject(e); })
+			.on('end', () => { resolve(output); });
 	});
 };
 
 // Remove undesirable characters ('/', ...)
-var formatVidName = (vidName) => {
+const formatVidName = function(vidName) {
 	for (let i = 0; i < vidName.length; i++) {
 		if (vidName[i] === "/") {
 			vidName = vidName.replaceAt(i, "_");
@@ -150,13 +144,13 @@ String.prototype.replaceAt = function(index, character) {
 //
 
 // Get the desired track from the user by using a console prompt
-var researchConsole = () => {
-	return new Promise (function(resolve, reject) {
+const researchConsole = function() {
+	return new Promise ((resolve, reject) => {
 		prompt.start();
 		prompt.get('q', (err, result) => {
 			if (err) throw err;
 			query2Tracks(result.q)
-				.then(function(tracks) {
+				.then(tracks => {
 					console.log("Found " + tracks.length + " tracks, select one : ");
 					// Display result of search
 					for (let i = 0; i < tracks.length; i++) {
@@ -164,115 +158,81 @@ var researchConsole = () => {
 					}
 					prompt.get('choice', (err, result) => {
 						if (err) throw err;
-						var track = tracks[parseInt(result.choice)];
+						let track = tracks[parseInt(result.choice)];
 						resolve(track);
 					});
-				}).catch(function(err) {
-		            reject(err);
-		        });
+				}).catch(err => { reject(err); });
     	});
 	});
 };
 
-// Test code
-/*
-researchConsole()
-	.then(function(track) {
-		console.log(track);
-	}).catch(function(err) {
-	    console.log(err);
-	});
-*/
 
-
-var generatePlaylist = (track) => {
-	return new Promise(function(resolve, reject) {
-		var playlist = [];
+const generatePlaylist = function(track) {
+	return new Promise((resolve, reject) => {
+		let playlist = [];
 
 		getRelatedArtists(track)
-			.then(function(artists) {
-				return Promise.all(artists.map(function (artist) {
+			.then(artists => {
+				return Promise.all(artists.map(artist => {
 					return artist2TopTracks(artist)
-				  		.then(function(tracks) {
+				  		.then(tracks => {
 						    for (let i = 0; i < tracks.length; i++) {
 								playlist.push(tracks[i]);
 							}
-					  	}).catch(function(err) {
-						    reject(err);
-						});
+					  	}).catch(err => { reject(err); });
 				}));
-			}).then(function() {
+			}).then(() => {
 				resolve(playlist);
-			}).catch(function(err) {
-			    reject(err);
-			});
+			}).catch(err => { reject(err); });
 	});
 };
 
-// Test code
-/*
-researchConsole()
-	.then(function(track) {
-		return generatePlaylist(track);
-	}).then(function(playlist) {
-		console.log(playlist);
-	}).catch(function(err) {
-	    console.log(err);
-	});
-*/
 
-
-var createVideoFolder = new Promise(function(resolve, reject) {
-	fs.mkdir('videos/' + PLAYLIST_ID, function(e) {
+const createVideoFolder = new Promise((resolve, reject) => {
+	fs.mkdir('videos/' + PLAYLIST_ID, e => {
 		if (e) reject(e);
 		resolve('Video folder created');
 	});
 });
 
-var createMusicFolder = new Promise(function(resolve, reject) {
-	fs.mkdir('musics/' + PLAYLIST_ID, function(e) {
+const createMusicFolder = new Promise((resolve, reject) => {
+	fs.mkdir('musics/' + PLAYLIST_ID, e => {
 		if (e) reject(e);
 		resolve('Music folder created');
 	});
 });
 
-var downloadPlaylist = (playlist) => {
-	return new Promise(function(resolve, reject) {
+const downloadPlaylist = function(playlist) {
+	return new Promise((resolve, reject) => {
 		Promise.all([createVideoFolder, createMusicFolder])
-			.then(function() {
-				return Promise.all(playlist.map(function (track) {
+			.then(() => {
+				return Promise.all(playlist.map(track => {
 					return track2Url(track)
-				  		.then(function(url) {
+				  		.then(url => {
 						    return url2Video(url);
-					  	}).then(function(video) {
+					  	}).then(video => {
 						    return video2Mp3(video);
-					  	}).then(function() {
-					  		return new Promise(function(resolve, reject) {
+					  	}).then(() => {
+					  		return new Promise((resolve, reject) => {
 					  			console.log("Downloaded : " + track.artists[0].name + " - " + track.name);
 					  			resolve(track);
 					  		});
-					  	}).catch(function(err) {
-						    return reject(err);
-						});
+					  	}).catch(err => { return reject(err); });
 				}));
-			}).then(function(playlist) {
+			}).then(playlist => {
 				resolve(playlist);
-			}).catch(function(err) {
-			    reject(err);
-			});
+			}).catch(err => { reject(err); });
 	});
 };
 
 // Test code
 researchConsole()
-	.then(function(track) {
-		console.log("Generate playlist...");
+	.then(track => {
+		console.log("Generating playlist...");
 		return generatePlaylist(track);
-	}).then(function(playlist) {
-		console.log("Download playlist...");
+	}).then(playlist => {
+		console.log("Downloading playlist...");
 		return downloadPlaylist(playlist);
-	}).then(function() {
+	}).then(() => {
 		console.log("Done");
-	}).catch(function(err) {
-	    console.log(err);
-	});
+	}).catch(err => { console.log(err); });
