@@ -28,9 +28,14 @@ const youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
 const LIMIT_RESULTS_QUERY = 10;
-const LIMIT_ART = 2;
-const LIMIT_TRACKS = 2;
+const LIMIT_ART = 15;
+const LIMIT_TRACKS = 6;
 const PLAYLIST_ID = Date.now(); // Unique Id for the created playlist
+
+
+//
+//	HELPERS	
+//
 
 
 // For a specific query string, return a list of best tracks
@@ -41,9 +46,7 @@ const query2Tracks = function(q) {
 			.then(data => {
 				let tracks = data.body.tracks.items.slice(0, LIMIT_RESULTS_QUERY);
 				resolve(tracks);
-			}, err => {
-				reject(err);
-			});
+			}, err => { reject(err); });
     });
 };
 
@@ -56,9 +59,7 @@ const getRelatedArtists = function(track) {
 	  		.then(data => {
 	  			let artists = data.body.artists.slice(0, LIMIT_ART);
 	    		resolve(artists);
-	  		}, err => {
-	    		reject(err);
-	  		});
+	  		}, err => { reject(err); });
   	});
 };
 
@@ -69,9 +70,7 @@ const artist2TopTracks = function(artist) {
 		  	.then((data) => {
 		  		let tracks = data.body.tracks.slice(0, LIMIT_TRACKS);
 		    	resolve(tracks);
-	    	}, (err) => {
-		    	reject(err);
-		  	});
+	    	}, (err) => { reject(err); });
   	});
 };
 
@@ -82,9 +81,10 @@ const track2Url = function(track) {
 		let query_youtube = track.artists[0].name + ' - ' + track.name; // Ex : "Artist - TrackName"
 
 		youTube.search(query_youtube, 1, (error, result) => {
-			if (error) reject(error);
+			if (error) { reject(error); }
 		  	else {
-		  		let vidName = formatVidName(result.items[0].snippet.title);
+	  			let vidName = result.items[0].snippet.title;
+		  		vidName = vidName.replace("/", "_");
 			    let vidId = result.items[0].id.videoId;
 			    let url = "http://www.youtube.com/watch?v=" + vidId;
 
@@ -104,10 +104,13 @@ const url2Video = function(resp) {
 
 		let path = 'videos/' + PLAYLIST_ID + "/" + resp.vidName + '.mp4';
 
-		ytdl(resp.url, options)
-		  	.pipe(fs.createWriteStream(path))
-		  	.on('finish', () => { resolve({vidName: resp.vidName, path: path}); })
-		  	.on('error', () => { reject("Error with ytdl"); });
+		try {
+			ytdl(resp.url, options)
+			  	.pipe(fs.createWriteStream(path))
+			  	.on('finish', () => { resolve({vidName: resp.vidName, path: path}); })
+			  	.on('error', () => { reject("Error with ytdl"); });
+		}
+		catch(e) { reject(e); }
   	});
 };
 
@@ -122,20 +125,6 @@ const video2Mp3 = function(resp) {
 			.on('error', (e) => { reject(e); })
 			.on('end', () => { resolve(output); });
 	});
-};
-
-// Remove undesirable characters ('/', ...)
-const formatVidName = function(vidName) {
-	for (let i = 0; i < vidName.length; i++) {
-		if (vidName[i] === "/") {
-			vidName = vidName.replaceAt(i, "_");
-		}
-	}
-	return vidName;
-};
-
-String.prototype.replaceAt = function(index, character) {
-    return this.substr(0, index) + character + this.substr(index+character.length);
 };
 
 
