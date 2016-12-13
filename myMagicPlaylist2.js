@@ -1,35 +1,23 @@
 "use strict";
 
-// Use this once node support es6 imports
-/*
-import * as SpotifyWebApi from 'spotify-web-api-node';
-import * as YouTube from 'youtube-node';
-import * as ytdl from 'ytdl-core';
-import * as ffmpeg from 'fluent-ffmpeg';
-import * as async from 'async';
-import * as prompt from 'prompt';
-import * as fs from 'fs';
-
-import { YOUTUBE_API_KEY } from './secrets';
-*/
-
 const SpotifyWebApi = require('spotify-web-api-node');
 const YouTube = require('youtube-node');
 const ytdl = require('ytdl-core');
 const ffmpeg = require('fluent-ffmpeg');
-const prompt = require('prompt');
 const fs = require('fs');
 const Promise = require('promise');
 
 const secrets = require('./secrets');
 
-const spotifyApi = new SpotifyWebApi();
+const spotifyApi = new SpotifyWebApi({
+  	clientId : secrets.spotifyClientId,
+  	clientSecret : secrets.spotifyClientSecret
+});
+
 const youTube = new YouTube();
 youTube.setKey(secrets.YOUTUBE_API_KEY);
 
-const LIMIT_RESULTS_QUERY = 10;
-const LIMIT_ART = 14;
-const LIMIT_TRACKS = 4;
+const USER_ID = '212vlt3wlc535plu6erjsm42i'; // Myself
 const PLAYLIST_ID = Date.now(); // Unique Id for the created playlist
 
 
@@ -38,39 +26,40 @@ const PLAYLIST_ID = Date.now(); // Unique Id for the created playlist
 //
 
 
-// For a specific query string, return a list of best tracks
-const query2Tracks = function(q) {
-    return new Promise ((resolve, reject) => {
-    	spotifyApi
-			.searchTracks(q)
-			.then(data => {
-				let tracks = data.body.tracks.items.slice(0, LIMIT_RESULTS_QUERY);
-				resolve(tracks);
-			}, err => { reject(err); });
-    });
-};
-
-// For a specific track, return a list of artists related to the main artist of the track
-const getRelatedArtists = function(track) {
+// Retrieve an access token
+const retrieveAccessToken = function() {
 	return new Promise ((resolve, reject) => {
-		let artist = track.artists[0];
-		spotifyApi
-			.getArtistRelatedArtists(artist.id)
-	  		.then(data => {
-	  			let artists = data.body.artists.slice(0, LIMIT_ART);
-	    		resolve(artists);
-	  		}, err => { reject(err); });
+		spotifyApi.clientCredentialsGrant()
+		  	.then(data => {
+		    	// Save the access token so that it's used in future calls
+		    	spotifyApi.setAccessToken(data.body['access_token']);
+		    	resolve("Successfully connected");
+		  	}, err => { reject(err); });
   	});
 };
 
-// For a specific artist, get its more popular tracks
-const artist2TopTracks = function(artist) {
+
+// Get my last playlist
+const getMyPlaylistId = function() {
 	return new Promise ((resolve, reject) => {
-		spotifyApi.getArtistTopTracks(artist.id, 'GB')
-		  	.then((data) => {
-		  		let tracks = data.body.tracks.slice(0, LIMIT_TRACKS);
+		spotifyApi.getUserPlaylists(USER_ID)
+		  	.then(data => {
+		    	resolve(data.body.items[0].id);
+		  	}, err => { reject(err); });
+  	});
+};
+
+
+// Get tracks in a playlist
+const playlist2Tracks = function(playlistId) {
+	return new Promise ((resolve, reject) => {
+		spotifyApi.getPlaylistTracks('spotifydiscover', playlistId)
+		  	.then(data => {
+		  		let tracks = data.body.items.map(track => {
+		    		return track.track;
+		    	});
 		    	resolve(tracks);
-	    	}, (err) => { reject(err); });
+		  	}, err => { reject(err); });
   	});
 };
 
@@ -94,6 +83,7 @@ const track2Url = function(track) {
 	});
 };
 
+
 // For a specific Youtube url, download Youtube video
 const url2Video = function(resp) {
 	return new Promise ((resolve, reject) => {
@@ -114,6 +104,7 @@ const url2Video = function(resp) {
   	});
 };
 
+
 // For a specific video, convert to mp3
 const video2Mp3 = function(resp) {
 	return new Promise ((resolve, reject) => {
@@ -128,55 +119,6 @@ const video2Mp3 = function(resp) {
 };
 
 
-//
-//	ACTUAL PROGRAM	
-//
-
-// Get the desired track from the user by using a console prompt
-const researchConsole = function() {
-	return new Promise ((resolve, reject) => {
-		prompt.start();
-		prompt.get('q', (err, result) => {
-			if (err) throw err;
-			query2Tracks(result.q)
-				.then(tracks => {
-					console.log("Found " + tracks.length + " tracks, select one : ");
-					// Display result of search
-					for (let i = 0; i < tracks.length; i++) {
-						console.log(i + ") " + tracks[i].artists[0].name + " - " + tracks[i].name);
-					}
-					prompt.get('choice', (err, result) => {
-						if (err) throw err;
-						let track = tracks[parseInt(result.choice)];
-						resolve(track);
-					});
-				}).catch(err => { reject(err); });
-    	});
-	});
-};
-
-
-const generatePlaylist = function(track) {
-	return new Promise((resolve, reject) => {
-		let playlist = [];
-
-		getRelatedArtists(track)
-			.then(artists => {
-				return Promise.all(artists.map(artist => {
-					return artist2TopTracks(artist)
-				  		.then(tracks => {
-						    for (let i = 0; i < tracks.length; i++) {
-								playlist.push(tracks[i]);
-							}
-					  	}).catch(err => { reject(err); });
-				}));
-			}).then(() => {
-				resolve(playlist);
-			}).catch(err => { reject(err); });
-	});
-};
-
-
 const createVideoFolder = new Promise((resolve, reject) => {
 	fs.mkdir('videos/' + PLAYLIST_ID, e => {
 		if (e) reject(e);
@@ -184,12 +126,14 @@ const createVideoFolder = new Promise((resolve, reject) => {
 	});
 });
 
+
 const createMusicFolder = new Promise((resolve, reject) => {
 	fs.mkdir('musics/' + PLAYLIST_ID, e => {
 		if (e) reject(e);
 		resolve('Music folder created');
 	});
 });
+
 
 const downloadPlaylist = function(playlist) {
 	return new Promise((resolve, reject) => {
@@ -214,14 +158,23 @@ const downloadPlaylist = function(playlist) {
 	});
 };
 
-// Test code
-researchConsole()
-	.then(track => {
-		console.log("Generating playlist...");
-		return generatePlaylist(track);
+
+//
+//	ACTUAL PROGRAM
+//
+
+
+console.log("Retrieving Access token...");
+retrieveAccessToken()
+	.then(() => {
+		console.log("Getting playlist Id...");
+		return getMyPlaylistId();
+	}).then(playlistId => {
+		console.log("Retrieving playlist...");
+		return playlist2Tracks(playlistId);
 	}).then(playlist => {
 		console.log("Downloading playlist...");
 		return downloadPlaylist(playlist);
 	}).then(() => {
-		console.log("Done");
-	}).catch(err => { console.log(err); });
+ 		console.log("Done");
+ 	}).catch(err => { console.log(err); });
